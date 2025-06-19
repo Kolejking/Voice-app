@@ -2,15 +2,32 @@
  * API utility functions for communicating with the Flask backend
  */
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
-// Replace with your actual Flask backend URL when ready for production
-const API_URL = 'https://your-flask-api.onrender.com/analyze';
+// API configuration
+const CONFIG = {
+  // Set this to true to use mock data during development
+  USE_MOCK_DATA: true,
+  
+  // Timeout for API requests in milliseconds (10 seconds)
+  API_TIMEOUT: 10000,
+  
+  // API endpoints
+  ENDPOINTS: {
+    // Production endpoint (replace with your actual deployed API)
+    PRODUCTION: 'https://your-flask-api.onrender.com/analyze',
+    
+    // Local development endpoint
+    // For Android Emulator, use 10.0.2.2 instead of localhost
+    // For iOS Simulator, use localhost
+    DEVELOPMENT: Platform.OS === 'android' 
+      ? 'http://10.0.2.2:5000/analyze'  // Android emulator special IP
+      : 'http://localhost:5000/analyze', // iOS or web
+  }
+};
 
-// Flag to use mock data for testing (set to false when backend is ready)
-const USE_MOCK_DATA = true;
-
-// Timeout for API requests in milliseconds (5 seconds)
-const API_TIMEOUT = 5000;
+// Select the appropriate API URL based on environment
+const API_URL = __DEV__ ? CONFIG.ENDPOINTS.DEVELOPMENT : CONFIG.ENDPOINTS.PRODUCTION;
 
 /**
  * Creates a promise that rejects after a specified timeout
@@ -58,13 +75,16 @@ export const analyzeAudio = async (fileUri: string): Promise<{ isAI: boolean; co
     }
     
     // Use mock data for testing if flag is set
-    if (USE_MOCK_DATA) {
+    if (CONFIG.USE_MOCK_DATA) {
+      console.log('Using mock data for API response');
       // Simulate network delay (0.5-1.5 seconds)
       const delay = 500 + Math.random() * 1000;
       await new Promise(resolve => setTimeout(resolve, delay));
       
       return generateMockResult();
     }
+    
+    console.log(`Sending request to API: ${API_URL}`);
     
     // Create form data for file upload
     const formData = new FormData();
@@ -88,7 +108,7 @@ export const analyzeAudio = async (fileUri: string): Promise<{ isAI: boolean; co
           'Accept': 'application/json',
         },
       }),
-      createTimeoutPromise(API_TIMEOUT)
+      createTimeoutPromise(CONFIG.API_TIMEOUT)
     ]);
     
     // Check if request was successful

@@ -1,27 +1,32 @@
 {
   "expo": {
-    "name": "user-app",
-    "slug": "user-app",
+    "name": "Voice Analyzer",
+    "slug": "voice-analyzer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "user-app",
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.voiceanalyzer"
     },
     "android": {
-      "package": "com.appacella.userapp",
+      "package": "com.yourcompany.voiceanalyzer",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -32,7 +37,7 @@
       [
         "expo-router",
         {
-          "origin": "https://pool-ecs-fargate-mvp-ssh-task-09a09717.dev.kiki.dev"
+          "origin": "https://${SUBDOMAIN}.dev.kiki.dev"
         }
       ],
       [
