@@ -4,6 +4,7 @@
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
+import { Platform } from 'react-native';
 
 // Audio recording settings
 const RECORDING_OPTIONS = {
@@ -29,6 +30,22 @@ const RECORDING_OPTIONS = {
     mimeType: 'audio/webm',
     bitsPerSecond: 128000,
   },
+};
+
+// Operation timeout (10 seconds)
+const OPERATION_TIMEOUT = 10000;
+
+/**
+ * Creates a promise that rejects after a specified timeout
+ * @param ms Timeout in milliseconds
+ * @returns Promise that rejects after timeout
+ */
+const createTimeoutPromise = (ms: number): Promise<never> => {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Operation timed out after ${ms}ms`));
+    }, ms);
+  });
 };
 
 /**
@@ -57,16 +74,32 @@ export const startRecording = async (): Promise<Audio.Recording> => {
       throw new Error('Permission to record audio was denied');
     }
     
-    // Prepare recording
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
+    // Prepare recording with timeout
+    await Promise.race([
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        // Additional settings for Android
+        ...(Platform.OS === 'android' ? {
+          playThroughEarpieceAndroid: false,
+        } : {})
+      }),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
-    // Start recording
+    // Start recording with timeout
     const recording = new Audio.Recording();
-    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-    await recording.startAsync();
+    
+    await Promise.race([
+      recording.prepareToRecordAsync(RECORDING_OPTIONS),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
+    
+    await Promise.race([
+      recording.startAsync(),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
     return recording;
   } catch (error) {
@@ -82,13 +115,20 @@ export const startRecording = async (): Promise<Audio.Recording> => {
  */
 export const stopRecording = async (recording: Audio.Recording): Promise<string> => {
   try {
-    // Stop recording
-    await recording.stopAndUnloadAsync();
+    // Stop recording with timeout
+    await Promise.race([
+      recording.stopAndUnloadAsync(),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
-    // Reset audio mode
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-    });
+    // Reset audio mode with timeout
+    await Promise.race([
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      }),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
     // Get recording URI
     const uri = recording.getURI();
@@ -109,11 +149,14 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
  */
 export const pickAudioFile = async (): Promise<string> => {
   try {
-    // Open document picker
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'audio/wav',
-      copyToCacheDirectory: true,
-    });
+    // Open document picker with timeout
+    const result = await Promise.race([
+      DocumentPicker.getDocumentAsync({
+        type: 'audio/*', // Accept any audio file type for better user experience
+        copyToCacheDirectory: true,
+      }),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
     // Check if user canceled
     if (result.canceled) {
@@ -135,11 +178,19 @@ export const pickAudioFile = async (): Promise<string> => {
  */
 export const playAudio = async (uri: string): Promise<Audio.Sound> => {
   try {
-    // Load sound
-    const { sound } = await Audio.Sound.createAsync({ uri });
+    // Load sound with timeout
+    const soundResult = await Promise.race([
+      Audio.Sound.createAsync({ uri }),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
-    // Play sound
-    await sound.playAsync();
+    const sound = soundResult.sound;
+    
+    // Play sound with timeout
+    await Promise.race([
+      sound.playAsync(),
+      createTimeoutPromise(OPERATION_TIMEOUT)
+    ]);
     
     return sound;
   } catch (error) {
