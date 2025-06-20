@@ -120,7 +120,7 @@ export const analyzeAudio = async (fileUri: string): Promise<{
     const fileName = fileUri.split('/').pop() || `recording.${fileExtension}`;
     console.log(`File name: ${fileName}`);
     
-    // Append file to form data
+    // Append file to form data with key 'audio' as expected by the Flask backend
     formData.append('audio', {
       uri: fileUri,
       name: fileName,
