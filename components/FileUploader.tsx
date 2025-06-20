@@ -10,6 +10,7 @@ interface FileUploaderProps {
 const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelected }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Handle file selection
@@ -22,9 +23,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelected }) => {
       
       const uri = await pickAudioFile();
       
-      // Extract file name from URI
+      // Extract file name and extension from URI
       const name = uri.split('/').pop() || 'audio.wav';
+      const extension = name.split('.').pop()?.toLowerCase() || '';
+      
       setFileName(name);
+      setFileType(extension);
       
       onFileSelected(uri);
     } catch (error) {
@@ -62,15 +66,29 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelected }) => {
           </TouchableOpacity>
           
           <Text style={styles.instructionText}>
-            Tap to select an audio file
+            Tap to select an audio file (.wav or .flac)
           </Text>
           
           {fileName && (
             <View style={styles.fileInfoContainer}>
-              <Ionicons name="document-text" size={20} color="#007AFF" />
+              <Ionicons 
+                name="document-text" 
+                size={20} 
+                color="#007AFF" 
+              />
               <Text style={styles.fileNameText} numberOfLines={1} ellipsizeMode="middle">
                 {fileName}
               </Text>
+              {fileType && (
+                <View style={[
+                  styles.fileTypeBadge,
+                  { backgroundColor: fileType === 'flac' ? '#4CD964' : '#007AFF' }
+                ]}>
+                  <Text style={styles.fileTypeBadgeText}>
+                    {fileType.toUpperCase()}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
           
@@ -120,7 +138,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     marginLeft: 8,
-    maxWidth: '90%',
+    maxWidth: '60%',
+  },
+  fileTypeBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#007AFF',
+  },
+  fileTypeBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   loadingContainer: {
     alignItems: 'center',

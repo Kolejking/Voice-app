@@ -83,7 +83,7 @@ const UploadScreen: React.FC = () => {
       
       <View style={styles.content}>
         <Text style={styles.instructionText}>
-          Upload a .wav file to analyze whether it's AI-generated or genuine.
+          Upload a .wav or .flac file to analyze whether it's AI-generated or genuine.
         </Text>
         
         <FileUploader onFileSelected={handleFileSelected} />

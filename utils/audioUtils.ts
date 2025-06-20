@@ -32,46 +32,6 @@ const RECORDING_OPTIONS = {
   },
 };
 
-// Operation timeout (15 seconds - increased from default)
-const OPERATION_TIMEOUT = 15000;
-
-/**
- * Creates a promise that rejects after a specified timeout
- * @param ms Timeout in milliseconds
- * @param operationName Name of the operation for better error messages
- * @returns Promise that rejects after timeout
- */
-const createTimeoutPromise = (ms: number, operationName: string): Promise<never> => {
-  return new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(`${operationName} timed out after ${ms}ms`));
-    }, ms);
-  });
-};
-
-/**
- * Safely execute an async operation with timeout
- * @param operation The async operation to execute
- * @param timeoutMs Timeout in milliseconds
- * @param operationName Name of the operation for better error messages
- * @returns Promise with the result of the operation
- */
-const executeWithTimeout = async <T>(
-  operation: Promise<T>, 
-  timeoutMs: number, 
-  operationName: string
-): Promise<T> => {
-  try {
-    return await Promise.race([
-      operation,
-      createTimeoutPromise(timeoutMs, operationName)
-    ]);
-  } catch (error) {
-    console.error(`Error in ${operationName}:`, error);
-    throw error;
-  }
-};
-
 /**
  * Request permission to record audio
  * @returns Promise with boolean indicating if permission was granted
@@ -79,13 +39,9 @@ const executeWithTimeout = async <T>(
 export const requestAudioPermission = async (): Promise<boolean> => {
   try {
     console.log('Requesting audio permission...');
-    const permissionResult = await executeWithTimeout(
-      Audio.requestPermissionsAsync(),
-      5000,
-      'Audio permission request'
-    );
-    console.log('Audio permission result:', permissionResult);
-    return permissionResult.granted;
+    const { granted } = await Audio.requestPermissionsAsync();
+    console.log('Audio permission result:', granted);
+    return granted;
   } catch (error) {
     console.error('Error requesting audio permission:', error);
     return false;
@@ -107,37 +63,25 @@ export const startRecording = async (): Promise<Audio.Recording> => {
     
     // Prepare recording
     console.log('Setting audio mode...');
-    await executeWithTimeout(
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        // Additional settings for Android
-        ...(Platform.OS === 'android' ? {
-          playThroughEarpieceAndroid: false,
-        } : {})
-      }),
-      5000,
-      'Set audio mode'
-    );
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      // Additional settings for Android
+      ...(Platform.OS === 'android' ? {
+        playThroughEarpieceAndroid: false,
+      } : {})
+    });
     
     // Start recording
     console.log('Creating recording object...');
     const recording = new Audio.Recording();
     
     console.log('Preparing to record...');
-    await executeWithTimeout(
-      recording.prepareToRecordAsync(RECORDING_OPTIONS),
-      10000,
-      'Prepare recording'
-    );
+    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
     
     console.log('Starting recording...');
-    await executeWithTimeout(
-      recording.startAsync(),
-      5000,
-      'Start recording'
-    );
+    await recording.startAsync();
     
     console.log('Recording started successfully');
     return recording;
@@ -156,22 +100,14 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
   console.log('Stopping recording...');
   try {
     // Stop recording
-    await executeWithTimeout(
-      recording.stopAndUnloadAsync(),
-      10000,
-      'Stop recording'
-    );
+    await recording.stopAndUnloadAsync();
     
     // Reset audio mode
     console.log('Resetting audio mode...');
-    await executeWithTimeout(
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      }),
-      5000,
-      'Reset audio mode'
-    );
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+    });
     
     // Get recording URI
     const uri = recording.getURI();
@@ -188,21 +124,17 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
 };
 
 /**
- * Pick a .wav file from device storage
+ * Pick an audio file from device storage
  * @returns Promise with the URI of the selected file
  */
 export const pickAudioFile = async (): Promise<string> => {
   console.log('Opening document picker...');
   try {
-    // Open document picker
-    const result = await executeWithTimeout(
-      DocumentPicker.getDocumentAsync({
-        type: 'audio/*', // Accept any audio file type
-        copyToCacheDirectory: true,
-      }),
-      OPERATION_TIMEOUT,
-      'Document picker'
-    );
+    // Open document picker with specific audio types
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac'],
+      copyToCacheDirectory: true,
+    });
     
     // Check if user canceled
     if (result.canceled) {
@@ -210,6 +142,13 @@ export const pickAudioFile = async (): Promise<string> => {
     }
     
     const uri = result.assets[0].uri;
+    const fileExtension = uri.split('.').pop()?.toLowerCase() || '';
+    
+    // Validate file type
+    if (!['wav', 'flac'].includes(fileExtension)) {
+      throw new Error('Unsupported file type. Only .wav and .flac files are supported.');
+    }
+    
     console.log('File selected, URI:', uri);
     return uri;
   } catch (error) {
@@ -227,21 +166,11 @@ export const playAudio = async (uri: string): Promise<Audio.Sound> => {
   console.log('Loading audio to play...');
   try {
     // Load sound
-    const soundResult = await executeWithTimeout(
-      Audio.Sound.createAsync({ uri }),
-      10000,
-      'Load sound'
-    );
-    
-    const sound = soundResult.sound;
+    const { sound } = await Audio.Sound.createAsync({ uri });
     
     // Play sound
     console.log('Playing audio...');
-    await executeWithTimeout(
-      sound.playAsync(),
-      5000,
-      'Play sound'
-    );
+    await sound.playAsync();
     
     return sound;
   } catch (error) {
