@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,30 +16,57 @@ const UploadScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Handle when file is selected
-  const handleFileSelected = (uri: string) => {
+  const handleFileSelected = useCallback((uri: string) => {
+    console.log('File selected, URI:', uri);
     setFileUri(uri);
     setError(null);
-  };
+  }, []);
 
   // Handle analysis of uploaded file
-  const handleAnalyzeFile = async () => {
-    if (!fileUri) return;
+  const handleAnalyzeFile = useCallback(async () => {
+    if (!fileUri) {
+      Alert.alert('Error', 'No file selected. Please select an audio file first.');
+      return;
+    }
     
     try {
       setIsAnalyzing(true);
       setError(null);
       
-      const result = await analyzeAudio(fileUri);
+      console.log('Starting file analysis...');
+      
+      // Set a timeout for the entire operation
+      const analysisPromise = analyzeAudio(fileUri);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Analysis timed out after 20 seconds'));
+        }, 20000);
+      });
+      
+      // Race between analysis and timeout
+      const result = await Promise.race([analysisPromise, timeoutPromise]);
+      
+      console.log('Analysis complete, navigating to results');
       
       // Navigate to results screen with analysis result
       navigation.navigate('Result', { result });
     } catch (error) {
       console.error('Error analyzing file:', error);
+      
+      // Show alert for better visibility
+      Alert.alert(
+        'Analysis Error',
+        `Failed to analyze file: ${(error as Error).message}`,
+        [{ text: 'OK' }]
+      );
+      
       setError(`Failed to analyze file: ${(error as Error).message}`);
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [fileUri, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -74,6 +101,7 @@ const UploadScreen: React.FC = () => {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
             <Text style={styles.loadingText}>Analyzing audio...</Text>
+            <Text style={styles.loadingSubtext}>This may take a few moments</Text>
           </View>
         )}
         
@@ -143,6 +171,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#666',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   errorContainer: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,30 +16,57 @@ const RecordScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Handle when recording is complete
-  const handleRecordingComplete = (uri: string) => {
+  const handleRecordingComplete = useCallback((uri: string) => {
+    console.log('Recording complete, URI:', uri);
     setAudioUri(uri);
     setError(null);
-  };
+  }, []);
 
   // Handle analysis of recorded audio
-  const handleAnalyzeAudio = async () => {
-    if (!audioUri) return;
+  const handleAnalyzeAudio = useCallback(async () => {
+    if (!audioUri) {
+      Alert.alert('Error', 'No audio recording found. Please record audio first.');
+      return;
+    }
     
     try {
       setIsAnalyzing(true);
       setError(null);
       
-      const result = await analyzeAudio(audioUri);
+      console.log('Starting audio analysis...');
+      
+      // Set a timeout for the entire operation
+      const analysisPromise = analyzeAudio(audioUri);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Analysis timed out after 20 seconds'));
+        }, 20000);
+      });
+      
+      // Race between analysis and timeout
+      const result = await Promise.race([analysisPromise, timeoutPromise]);
+      
+      console.log('Analysis complete, navigating to results');
       
       // Navigate to results screen with analysis result
       navigation.navigate('Result', { result });
     } catch (error) {
       console.error('Error analyzing audio:', error);
+      
+      // Show alert for better visibility
+      Alert.alert(
+        'Analysis Error',
+        `Failed to analyze audio: ${(error as Error).message}`,
+        [{ text: 'OK' }]
+      );
+      
       setError(`Failed to analyze audio: ${(error as Error).message}`);
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [audioUri, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -74,6 +101,7 @@ const RecordScreen: React.FC = () => {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
             <Text style={styles.loadingText}>Analyzing audio...</Text>
+            <Text style={styles.loadingSubtext}>This may take a few moments</Text>
           </View>
         )}
         
@@ -143,6 +171,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#666',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   errorContainer: {
     flexDirection: 'row',

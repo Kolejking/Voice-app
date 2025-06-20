@@ -32,20 +32,44 @@ const RECORDING_OPTIONS = {
   },
 };
 
-// Operation timeout (10 seconds)
-const OPERATION_TIMEOUT = 10000;
+// Operation timeout (15 seconds - increased from default)
+const OPERATION_TIMEOUT = 15000;
 
 /**
  * Creates a promise that rejects after a specified timeout
  * @param ms Timeout in milliseconds
+ * @param operationName Name of the operation for better error messages
  * @returns Promise that rejects after timeout
  */
-const createTimeoutPromise = (ms: number): Promise<never> => {
+const createTimeoutPromise = (ms: number, operationName: string): Promise<never> => {
   return new Promise((_, reject) => {
     setTimeout(() => {
-      reject(new Error(`Operation timed out after ${ms}ms`));
+      reject(new Error(`${operationName} timed out after ${ms}ms`));
     }, ms);
   });
+};
+
+/**
+ * Safely execute an async operation with timeout
+ * @param operation The async operation to execute
+ * @param timeoutMs Timeout in milliseconds
+ * @param operationName Name of the operation for better error messages
+ * @returns Promise with the result of the operation
+ */
+const executeWithTimeout = async <T>(
+  operation: Promise<T>, 
+  timeoutMs: number, 
+  operationName: string
+): Promise<T> => {
+  try {
+    return await Promise.race([
+      operation,
+      createTimeoutPromise(timeoutMs, operationName)
+    ]);
+  } catch (error) {
+    console.error(`Error in ${operationName}:`, error);
+    throw error;
+  }
 };
 
 /**
@@ -54,8 +78,14 @@ const createTimeoutPromise = (ms: number): Promise<never> => {
  */
 export const requestAudioPermission = async (): Promise<boolean> => {
   try {
-    const { granted } = await Audio.requestPermissionsAsync();
-    return granted;
+    console.log('Requesting audio permission...');
+    const permissionResult = await executeWithTimeout(
+      Audio.requestPermissionsAsync(),
+      5000,
+      'Audio permission request'
+    );
+    console.log('Audio permission result:', permissionResult);
+    return permissionResult.granted;
   } catch (error) {
     console.error('Error requesting audio permission:', error);
     return false;
@@ -67,6 +97,7 @@ export const requestAudioPermission = async (): Promise<boolean> => {
  * @returns Promise with the recording object
  */
 export const startRecording = async (): Promise<Audio.Recording> => {
+  console.log('Starting recording...');
   try {
     // Ensure app has recording permission
     const permissionGranted = await requestAudioPermission();
@@ -74,8 +105,9 @@ export const startRecording = async (): Promise<Audio.Recording> => {
       throw new Error('Permission to record audio was denied');
     }
     
-    // Prepare recording with timeout
-    await Promise.race([
+    // Prepare recording
+    console.log('Setting audio mode...');
+    await executeWithTimeout(
       Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -85,22 +117,29 @@ export const startRecording = async (): Promise<Audio.Recording> => {
           playThroughEarpieceAndroid: false,
         } : {})
       }),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      5000,
+      'Set audio mode'
+    );
     
-    // Start recording with timeout
+    // Start recording
+    console.log('Creating recording object...');
     const recording = new Audio.Recording();
     
-    await Promise.race([
+    console.log('Preparing to record...');
+    await executeWithTimeout(
       recording.prepareToRecordAsync(RECORDING_OPTIONS),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      10000,
+      'Prepare recording'
+    );
     
-    await Promise.race([
+    console.log('Starting recording...');
+    await executeWithTimeout(
       recording.startAsync(),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      5000,
+      'Start recording'
+    );
     
+    console.log('Recording started successfully');
     return recording;
   } catch (error) {
     console.error('Error starting recording:', error);
@@ -114,21 +153,25 @@ export const startRecording = async (): Promise<Audio.Recording> => {
  * @returns Promise with the URI of the recorded file
  */
 export const stopRecording = async (recording: Audio.Recording): Promise<string> => {
+  console.log('Stopping recording...');
   try {
-    // Stop recording with timeout
-    await Promise.race([
+    // Stop recording
+    await executeWithTimeout(
       recording.stopAndUnloadAsync(),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      10000,
+      'Stop recording'
+    );
     
-    // Reset audio mode with timeout
-    await Promise.race([
+    // Reset audio mode
+    console.log('Resetting audio mode...');
+    await executeWithTimeout(
       Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
       }),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      5000,
+      'Reset audio mode'
+    );
     
     // Get recording URI
     const uri = recording.getURI();
@@ -136,6 +179,7 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
       throw new Error('Recording URI is null');
     }
     
+    console.log('Recording stopped, URI:', uri);
     return uri;
   } catch (error) {
     console.error('Error stopping recording:', error);
@@ -148,23 +192,26 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
  * @returns Promise with the URI of the selected file
  */
 export const pickAudioFile = async (): Promise<string> => {
+  console.log('Opening document picker...');
   try {
-    // Open document picker with timeout
-    const result = await Promise.race([
+    // Open document picker
+    const result = await executeWithTimeout(
       DocumentPicker.getDocumentAsync({
-        type: 'audio/*', // Accept any audio file type for better user experience
+        type: 'audio/*', // Accept any audio file type
         copyToCacheDirectory: true,
       }),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      OPERATION_TIMEOUT,
+      'Document picker'
+    );
     
     // Check if user canceled
     if (result.canceled) {
       throw new Error('User canceled file selection');
     }
     
-    // Return file URI
-    return result.assets[0].uri;
+    const uri = result.assets[0].uri;
+    console.log('File selected, URI:', uri);
+    return uri;
   } catch (error) {
     console.error('Error picking audio file:', error);
     throw error;
@@ -177,20 +224,24 @@ export const pickAudioFile = async (): Promise<string> => {
  * @returns Promise with the sound object
  */
 export const playAudio = async (uri: string): Promise<Audio.Sound> => {
+  console.log('Loading audio to play...');
   try {
-    // Load sound with timeout
-    const soundResult = await Promise.race([
+    // Load sound
+    const soundResult = await executeWithTimeout(
       Audio.Sound.createAsync({ uri }),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      10000,
+      'Load sound'
+    );
     
     const sound = soundResult.sound;
     
-    // Play sound with timeout
-    await Promise.race([
+    // Play sound
+    console.log('Playing audio...');
+    await executeWithTimeout(
       sound.playAsync(),
-      createTimeoutPromise(OPERATION_TIMEOUT)
-    ]);
+      5000,
+      'Play sound'
+    );
     
     return sound;
   } catch (error) {
