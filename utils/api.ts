@@ -14,13 +14,13 @@ const CONFIG = {
   
   // API endpoints
   ENDPOINTS: {
-    // Local development endpoint
+    // Local development endpoint - Updated to match your Flask backend
     // For Android Emulator, use 10.0.2.2 instead of localhost
     // For iOS Simulator, use localhost
     // For physical devices, use your computer's IP address on the local network
-    PREDICT: Platform.OS === 'android' 
-      ? 'http://10.0.2.2:5000/predict'  // Android emulator special IP
-      : 'http://localhost:5000/predict', // iOS or web
+    ANALYZE: Platform.OS === 'android' 
+      ? 'http://10.0.2.2:5000/analyze'  // Android emulator special IP
+      : 'http://localhost:5000/analyze', // iOS or web
   }
 };
 
@@ -42,17 +42,22 @@ const createTimeoutPromise = (ms: number, operationName: string): Promise<never>
  * Generates mock analysis result for testing
  * @returns Mock analysis result
  */
-const generateMockResult = (): { prediction: string; confidence: number } => {
+const generateMockResult = (): { isAI: boolean; confidence: number; message: string } => {
   console.log('Generating mock result');
   // Randomly determine if the voice is genuine or fake
-  const isFake = Math.random() > 0.5;
+  const isAI = Math.random() > 0.5;
   
   // Generate a random confidence level between 0.7 and 0.95
   const confidence = 0.7 + Math.random() * 0.25;
   
+  const message = isAI 
+    ? "This voice appears to be AI-generated. The analysis detected patterns consistent with synthetic speech."
+    : "This voice appears to be from a genuine human. No synthetic patterns were detected.";
+  
   return { 
-    prediction: isFake ? "Fake" : "Genuine",
-    confidence: confidence
+    isAI,
+    confidence,
+    message
   };
 };
 
@@ -88,14 +93,8 @@ export const analyzeAudio = async (fileUri: string): Promise<{
       
       const mockResult = generateMockResult();
       return {
-        isAI: mockResult.prediction === "Fake",
-        confidence: mockResult.confidence,
-        message: `This voice appears to be ${mockResult.prediction.toLowerCase()}. ${
-          mockResult.prediction === "Fake" 
-            ? "The analysis detected patterns consistent with synthetic speech." 
-            : "No synthetic patterns were detected."
-        }`,
-        rawPrediction: mockResult.prediction
+        ...mockResult,
+        rawPrediction: mockResult.isAI ? "Deepfake" : "Genuine"
       };
     }
     
@@ -111,7 +110,7 @@ export const analyzeAudio = async (fileUri: string): Promise<{
     // Determine MIME type based on file extension
     const mimeType = fileExtension === 'flac' ? 'audio/flac' : 'audio/wav';
     
-    console.log(`Sending request to API: ${CONFIG.ENDPOINTS.PREDICT}`);
+    console.log(`Sending request to API: ${CONFIG.ENDPOINTS.ANALYZE}`);
     
     // Create form data for file upload
     const formData = new FormData();
@@ -130,7 +129,7 @@ export const analyzeAudio = async (fileUri: string): Promise<{
     console.log('Form data created, sending request...');
     
     // Race between fetch request and timeout
-    const fetchPromise = fetch(CONFIG.ENDPOINTS.PREDICT, {
+    const fetchPromise = fetch(CONFIG.ENDPOINTS.ANALYZE, {
       method: 'POST',
       body: formData,
       headers: {
@@ -156,20 +155,13 @@ export const analyzeAudio = async (fileUri: string): Promise<{
     const result = await response.json();
     console.log('Analysis complete, result:', result);
     
-    // Expected response format from Flask: { prediction: "Genuine" | "Fake", confidence: number }
-    // Convert to our app's format
-    const prediction = result.prediction || "Unknown";
-    const confidence = result.confidence || 0.5;
-    
+    // Your Flask backend returns: { isAI: boolean, confidence: number, message: string }
+    // This matches our expected format perfectly
     return {
-      isAI: prediction === "Fake",
-      confidence: confidence,
-      message: `This voice appears to be ${prediction.toLowerCase()}. ${
-        prediction === "Fake" 
-          ? "The analysis detected patterns consistent with synthetic speech." 
-          : "No synthetic patterns were detected."
-      }`,
-      rawPrediction: prediction
+      isAI: result.isAI || false,
+      confidence: result.confidence || 0.5,
+      message: result.message || "Analysis completed",
+      rawPrediction: result.isAI ? "Deepfake" : "Genuine"
     };
   } catch (error) {
     console.error('Error analyzing audio:', error);

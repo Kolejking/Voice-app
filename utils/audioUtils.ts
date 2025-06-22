@@ -124,15 +124,71 @@ export const stopRecording = async (recording: Audio.Recording): Promise<string>
 };
 
 /**
+ * Validates if a file is a supported audio format
+ * @param uri File URI to validate
+ * @param fileName Original file name
+ * @returns Promise with validation result
+ */
+const validateAudioFile = async (uri: string, fileName: string): Promise<{ isValid: boolean; fileType: string; error?: string }> => {
+  try {
+    // Get file info
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+    
+    if (!fileInfo.exists) {
+      return { isValid: false, fileType: '', error: 'File does not exist' };
+    }
+    
+    // Check file size (should be > 0)
+    if (fileInfo.size === 0) {
+      return { isValid: false, fileType: '', error: 'File is empty' };
+    }
+    
+    // Extract file extension from original filename
+    const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+    console.log(`Original file extension: ${fileExtension}`);
+    
+    // Also check URI extension as fallback
+    const uriExtension = uri.split('.').pop()?.toLowerCase() || '';
+    console.log(`URI file extension: ${uriExtension}`);
+    
+    // Use original filename extension if available, otherwise use URI extension
+    const detectedExtension = fileExtension || uriExtension;
+    
+    // Validate file type
+    if (!['wav', 'flac'].includes(detectedExtension)) {
+      return { 
+        isValid: false, 
+        fileType: detectedExtension, 
+        error: `Unsupported file type: .${detectedExtension}. Only .wav and .flac files are supported.` 
+      };
+    }
+    
+    console.log(`File validation successful: ${detectedExtension}, size: ${fileInfo.size} bytes`);
+    return { isValid: true, fileType: detectedExtension };
+    
+  } catch (error) {
+    console.error('Error validating file:', error);
+    return { isValid: false, fileType: '', error: `Validation error: ${(error as Error).message}` };
+  }
+};
+
+/**
  * Pick an audio file from device storage
  * @returns Promise with the URI of the selected file
  */
 export const pickAudioFile = async (): Promise<string> => {
   console.log('Opening document picker...');
   try {
-    // Open document picker with specific audio types
+    // Open document picker with broader audio types and all files as fallback
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac'],
+      type: [
+        'audio/wav', 
+        'audio/x-wav', 
+        'audio/flac', 
+        'audio/x-flac',
+        'audio/*',  // Broader audio type
+        '*/*'       // Allow all files as fallback
+      ],
       copyToCacheDirectory: true,
     });
     
@@ -141,16 +197,22 @@ export const pickAudioFile = async (): Promise<string> => {
       throw new Error('User canceled file selection');
     }
     
-    const uri = result.assets[0].uri;
-    const fileExtension = uri.split('.').pop()?.toLowerCase() || '';
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const fileName = asset.name || 'unknown.wav';
     
-    // Validate file type
-    if (!['wav', 'flac'].includes(fileExtension)) {
-      throw new Error('Unsupported file type. Only .wav and .flac files are supported.');
+    console.log(`File selected - Name: ${fileName}, URI: ${uri}`);
+    
+    // Validate the selected file
+    const validation = await validateAudioFile(uri, fileName);
+    
+    if (!validation.isValid) {
+      throw new Error(validation.error || 'Invalid file selected');
     }
     
-    console.log('File selected, URI:', uri);
+    console.log(`File validation passed: ${validation.fileType}`);
     return uri;
+    
   } catch (error) {
     console.error('Error picking audio file:', error);
     throw error;

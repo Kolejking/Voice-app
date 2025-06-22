@@ -21,11 +21,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelected }) => {
       setIsLoading(true);
       setError(null);
       
+      console.log('Starting file selection...');
       const uri = await pickAudioFile();
       
       // Extract file name and extension from URI
       const name = uri.split('/').pop() || 'audio.wav';
       const extension = name.split('.').pop()?.toLowerCase() || '';
+      
+      console.log(`File selected successfully: ${name} (${extension})`);
       
       setFileName(name);
       setFileType(extension);
@@ -36,10 +39,22 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelected }) => {
       
       // If user canceled, don't show error
       if ((error as Error).message !== 'User canceled file selection') {
-        setError((error as Error).message);
+        const errorMessage = (error as Error).message;
+        setError(errorMessage);
+        
+        // Show more user-friendly error messages
+        let userFriendlyMessage = errorMessage;
+        if (errorMessage.includes('Unsupported file type')) {
+          userFriendlyMessage = 'Please select a .wav or .flac audio file. Other file types are not supported.';
+        } else if (errorMessage.includes('File is empty')) {
+          userFriendlyMessage = 'The selected file appears to be empty. Please choose a valid audio file.';
+        } else if (errorMessage.includes('File does not exist')) {
+          userFriendlyMessage = 'The selected file could not be accessed. Please try selecting another file.';
+        }
+        
         Alert.alert(
           'File Selection Error',
-          `Error selecting file: ${(error as Error).message}`,
+          userFriendlyMessage,
           [{ text: 'OK' }]
         );
       }
@@ -124,6 +139,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginTop: 10,
+    textAlign: 'center',
   },
   fileInfoContainer: {
     flexDirection: 'row',
@@ -132,13 +148,13 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
-    maxWidth: '80%',
+    maxWidth: '90%',
   },
   fileNameText: {
     fontSize: 14,
     color: '#333',
     marginLeft: 8,
-    maxWidth: '60%',
+    flex: 1,
   },
   fileTypeBadge: {
     marginLeft: 8,
@@ -164,12 +180,12 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 16,
-    padding: 10,
+    padding: 12,
     backgroundColor: '#FFF2F2',
     borderRadius: 8,
-    maxWidth: '80%',
+    maxWidth: '90%',
     borderWidth: 1,
     borderColor: '#FFCCCC',
   },
@@ -178,6 +194,7 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     marginLeft: 8,
     flex: 1,
+    lineHeight: 20,
   },
 });
 
